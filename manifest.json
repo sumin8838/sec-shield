@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Password Safety Helper",
+  "version": "1.0.0",
+  "description": "로그인 페이지에서 비밀번호 보안을 분석하는 확장 프로그램",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["utils.js", "analyzer.js", "content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
