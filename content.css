@@ -1,112 +1,402 @@
-#pw-helper-panel {
-  position: absolute;
-  z-index: 2147483647;
-  width: 320px;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
+/* =========================================================
+   content.css  -  PwGuard 비밀번호 보안 분석 패널 스타일
+   ========================================================= */
+
+/* ── 패널 컨테이너 ──────────────────────────────────────── */
+#pwguard-panel {
+  position: fixed; /* fixed로 scroll 영향 없이 화면에 고정 */
+  z-index: 2147483647; /* 최대 z-index로 항상 최상단 */
+  width: 280px;
   background: #ffffff;
-  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.14);
-  font-family: Arial, 'Malgun Gothic', sans-serif;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
-  line-height: 1.6;
-  color: #1f2937;
-  box-sizing: border-box;
+  line-height: 1.5;
+  color: #222;
+  display: none; /* 기본 숨김 */
+  transition: opacity 0.15s ease;
+  overflow: hidden;
 }
 
-#pw-helper-panel .pw-panel-header {
+/* 다크 모드 대응 */
+@media (prefers-color-scheme: dark) {
+  #pwguard-panel {
+    background: #1e1e1e;
+    border-color: #3a3a3a;
+    color: #e8e8e8;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* ── 헤더 ───────────────────────────────────────────────── */
+.pwguard-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #f8f9fa;
+  border-radius: 10px 10px 0 0;
 }
 
-#pw-helper-panel .pw-panel-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: #111827;
+@media (prefers-color-scheme: dark) {
+  .pwguard-header {
+    background: #2a2a2a;
+    border-bottom-color: #3a3a3a;
+  }
 }
 
-#pw-helper-panel .pw-panel-badge {
-  padding: 4px 9px;
-  border-radius: 999px;
-  background: #f3f4f6;
+.pwguard-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #444;
+  letter-spacing: 0.01em;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-title {
+    color: #ccc;
+  }
+}
+
+.pwguard-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: #999;
+  padding: 0 2px;
+  line-height: 1;
+  border-radius: 4px;
+  transition:
+    color 0.1s,
+    background 0.1s;
+}
+
+.pwguard-close:hover {
+  color: #444;
+  background: #e8e8e8;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-close:hover {
+    color: #eee;
+    background: #3a3a3a;
+  }
+}
+
+/* ── 본문 ───────────────────────────────────────────────── */
+.pwguard-body {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── 점수 행 ────────────────────────────────────────────── */
+.pwguard-score-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pwguard-status-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
   font-size: 11px;
   font-weight: 700;
-  color: #6b7280;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background: #e0e0e0;
+  color: #555;
 }
 
-#pw-helper-panel .pw-panel-row {
+.pwguard-status-badge.status-danger {
+  background: #fde8e8;
+  color: #c0392b;
+}
+
+.pwguard-status-badge.status-normal {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.pwguard-status-badge.status-safe {
+  background: #d4edda;
+  color: #155724;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-status-badge.status-danger {
+    background: #4a1515;
+    color: #f08080;
+  }
+  .pwguard-status-badge.status-normal {
+    background: #3d3000;
+    color: #f5c842;
+  }
+  .pwguard-status-badge.status-safe {
+    background: #0d2d1a;
+    color: #6fcf97;
+  }
+}
+
+.pwguard-score-text {
+  font-size: 12px;
+  color: #666;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-score-text {
+    color: #aaa;
+  }
+}
+
+/* ── 강도 바 ────────────────────────────────────────────── */
+.pwguard-strength-bar-wrap {
+  height: 5px;
+  background: #efefef;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-strength-bar-wrap {
+    background: #333;
+  }
+}
+
+.pwguard-strength-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition:
+    width 0.3s ease,
+    background-color 0.3s ease;
+  background: #ccc;
+}
+
+.pwguard-strength-bar.bar-danger {
+  background: #e74c3c;
+}
+.pwguard-strength-bar.bar-normal {
+  background: #f39c12;
+}
+.pwguard-strength-bar.bar-safe {
+  background: #27ae60;
+}
+
+/* ── 경고 목록 (강도 분석) ──────────────────────────────── */
+.pwguard-warnings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
-  align-items: baseline;
-  gap: 6px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pwguard-warning-item {
+  font-size: 12px;
+  color: #c0392b;
+  padding-left: 14px;
+  position: relative;
+  line-height: 1.45;
+}
+
+.pwguard-warning-item::before {
+  content: '•';
+  position: absolute;
+  left: 4px;
+  color: #e74c3c;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-warning-item {
+    color: #f08080;
+  }
+  .pwguard-warning-item::before {
+    color: #f08080;
+  }
+}
+
+/* ── 재사용 섹션 ─────────────────────────────────────────── */
+.pwguard-reuse-section {
+  border-top: 1px solid #fde8e8;
+  padding-top: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-reuse-section {
+    border-top-color: #4a2020;
+  }
+}
+
+.pwguard-reuse-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 6px;
 }
 
-#pw-helper-panel .pw-label {
-  min-width: 34px;
-  color: #6b7280;
-  font-size: 12px;
-}
-
-#pw-helper-panel .pw-unit {
-  color: #6b7280;
-  font-size: 12px;
-}
-
-#pw-helper-panel .pw-status {
+.pwguard-reuse-badge {
+  font-size: 11px;
   font-weight: 700;
-}
-
-#pw-helper-panel .pw-status.waiting {
-  color: #6b7280;
-}
-
-#pw-helper-panel .pw-status.danger {
-  color: #dc2626;
-}
-
-#pw-helper-panel .pw-status.normal {
-  color: #d97706;
-}
-
-#pw-helper-panel .pw-status.safe {
-  color: #059669;
-}
-
-#pw-helper-panel .pw-panel-section-title {
-  margin-top: 12px;
-  margin-bottom: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #374151;
-}
-
-#pw-helper-panel .pw-warning-list {
-  margin: 0;
-  padding-left: 18px;
-}
-
-#pw-helper-panel .pw-warning-list li {
-  margin-bottom: 5px;
-  color: #374151;
-  word-break: keep-all;
-}
-
-#pw-helper-panel .pw-extra-info {
-  margin-top: 10px;
-  font-size: 12px;
-  color: #6b7280;
-}
-
-#pw-helper-panel .pw-capslock-warning {
-  display: none;
-  margin-top: 10px;
-  padding: 8px 10px;
+  color: #c0392b;
+  background: #fde8e8;
+  padding: 2px 8px;
   border-radius: 10px;
-  background: #fff7ed;
-  border: 1px solid #fdba74;
-  color: #c2410c;
-  font-size: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-reuse-badge {
+    background: #4a1515;
+    color: #f08080;
+  }
+}
+
+.pwguard-detail-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: #888;
+  padding: 0;
+  transition: color 0.1s;
+}
+
+.pwguard-detail-toggle:hover {
+  color: #444;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-detail-toggle {
+    color: #777;
+  }
+  .pwguard-detail-toggle:hover {
+    color: #ccc;
+  }
+}
+
+.pwguard-reuse-warnings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 재사용 상세 정보 (토글) */
+.pwguard-reuse-details {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  background: #fff8f8;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-reuse-details {
+    background: #2a1a1a;
+  }
+}
+
+.pwguard-detail-item {
+  font-size: 11px;
+  color: #666;
+  padding-left: 10px;
+  position: relative;
+  line-height: 1.45;
+}
+
+.pwguard-detail-item::before {
+  content: '–';
+  position: absolute;
+  left: 0;
+  color: #bbb;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-detail-item {
+    color: #aaa;
+  }
+}
+
+/* ── 장기 사용 섹션 ──────────────────────────────────────── */
+.pwguard-longuse-section {
+  border-top: 1px solid #fff3cd;
+  padding-top: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-longuse-section {
+    border-top-color: #3d3000;
+  }
+}
+
+.pwguard-longuse-badge {
+  display: inline-block;
+  font-size: 11px;
   font-weight: 700;
+  color: #856404;
+  background: #fff3cd;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-longuse-badge {
+    background: #3d3000;
+    color: #f5c842;
+  }
+}
+
+.pwguard-longuse-warnings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── 사이트 더 보기 버튼 ─────────────────────────────────── */
+.pwguard-site-more-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: #888;
+  padding: 2px 0;
+  transition: color 0.1s;
+}
+
+.pwguard-site-more-btn:hover {
+  color: #444;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-site-more-btn {
+    color: #777;
+  }
+  .pwguard-site-more-btn:hover {
+    color: #ccc;
+  }
+}
+
+/* ── 추가 사이트 목록 ────────────────────────────────────── */
+.pwguard-site-extra-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }

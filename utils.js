@@ -53,7 +53,9 @@ window.PwUtils = (() => {
   }
 
   function normalizePassword(text) {
-    return String(text || '').trim().toLowerCase()
+    return String(text || '')
+      .trim()
+      .toLowerCase()
   }
 
   function buildPatternSignature(text) {

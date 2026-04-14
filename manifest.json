@@ -1,15 +1,20 @@
 {
   "manifest_version": 3,
-  "name": "Password Safety Helper",
-  "version": "1.0.0",
-  "description": "로그인 페이지에서 비밀번호 보안을 분석하는 확장 프로그램",
-  "permissions": ["storage"],
+  "name": "PwGuard - 비밀번호 보안 분석기",
+  "version": "1.1.0",
+  "description": "로그인·회원가입 페이지에서 비밀번호 강도를 실시간 분석하고 재사용을 탐지합니다.",
+
+  "permissions": ["storage", "activeTab"],
+
+  "host_permissions": ["<all_urls>"],
+
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["utils.js", "analyzer.js", "content.js"],
+      "js": ["utils.js", "storage.js", "analyzer.js", "reuse.js", "content.js"],
       "css": ["content.css"],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "all_frames": false
     }
   ]
 }

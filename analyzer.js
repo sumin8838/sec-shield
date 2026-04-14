@@ -1,16 +1,27 @@
 window.PwAnalyzer = (() => {
+  /**
+   * 비밀번호 강도를 평가하고 점수/상태/경고를 반환합니다.
+   *
+   * @param {string} password
+   * @param {{
+   *   siteName?: string,
+   *   reuseCount?: number,
+   *   leaked?: boolean
+   * }} options
+   * @returns {{ score: number, status: string, statusClass: string, warnings: string[], passed: string[] }}
+   */
   function evaluatePassword(password, options = {}) {
     const {
       siteName = '',
-      reused = false,
-      similarReused = false,
-      leaked = false,
+      reuseCount = 0, // 다른 사이트 재사용 횟수 (0이면 +10점, 5~9이면 +5점, 10+이면 +0점)
+      leaked = false, // 유출 비밀번호 여부 (향후 유출 검사 기능 연동용)
     } = options
 
     let score = 0
     const warnings = []
     const passed = []
 
+    // ── 빈 입력 ───────────────────────────────────────────────
     if (!password) {
       return {
         score: 0,
@@ -21,6 +32,7 @@ window.PwAnalyzer = (() => {
       }
     }
 
+    // ── 길이 (최대 30점) ──────────────────────────────────────
     if (password.length < 8) {
       warnings.push('길이가 너무 짧습니다.')
     } else if (password.length < 12) {
@@ -31,6 +43,7 @@ window.PwAnalyzer = (() => {
       passed.push('길이가 충분합니다.')
     }
 
+    // ── 문자 조합 (각 15점, 최대 60점) ───────────────────────
     if (/[A-Z]/.test(password)) {
       score += 15
       passed.push('대문자 포함')
@@ -59,6 +72,22 @@ window.PwAnalyzer = (() => {
       warnings.push('특수문자가 없습니다.')
     }
 
+    // ── 재사용 횟수 (최대 10점) ───────────────────────────────
+    if (reuseCount < 5) {
+      score += 10
+      passed.push('비밀번호 재사용 없음 (+10점)')
+    } else if (reuseCount < 10) {
+      score += 5
+      warnings.push(
+        `비밀번호를 ${reuseCount}개 사이트에서 재사용 중입니다. (+5점)`,
+      )
+    } else {
+      warnings.push(
+        `비밀번호를 ${reuseCount}개 이상 사이트에서 재사용 중입니다. (+0점)`,
+      )
+    }
+
+    // ── 감점 항목 ─────────────────────────────────────────────
     if (/(.)\1\1/.test(password)) {
       score -= 10
       warnings.push('같은 문자가 3번 이상 반복됩니다.')
@@ -74,24 +103,15 @@ window.PwAnalyzer = (() => {
       warnings.push('사이트명과 비슷한 문자열이 포함되어 있습니다.')
     }
 
-    if (reused) {
-      score -= 20
-      warnings.push('다른 사이트에서 동일한 비밀번호를 재사용 중입니다.')
-    }
-
-    if (similarReused) {
-      score -= 10
-      warnings.push('다른 사이트에서 유사한 비밀번호를 반복 사용 중입니다.')
-    }
-
     if (leaked) {
       score -= 30
-      warnings.push('유출 이력이 있는 비밀번호 입니다.')
+      warnings.push('유출 이력이 있는 비밀번호입니다.')
     }
 
-    if (score < 0) score = 0
-    if (score > 100) score = 100
+    // ── 범위 보정 ─────────────────────────────────────────────
+    score = Math.max(0, Math.min(100, score))
 
+    // ── 상태 판정 ─────────────────────────────────────────────
     let status = '위험'
     let statusClass = 'danger'
 
@@ -103,16 +123,8 @@ window.PwAnalyzer = (() => {
       statusClass = 'normal'
     }
 
-    return {
-      score,
-      status,
-      statusClass,
-      warnings,
-      passed,
-    }
+    return { score, status, statusClass, warnings, passed }
   }
 
-  return {
-    evaluatePassword,
-  }
+  return { evaluatePassword }
 })()

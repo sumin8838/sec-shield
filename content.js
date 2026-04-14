@@ -1,386 +1,421 @@
-;(() => {
-  const {
-    debounce,
-    getSiteName,
-    getOriginKey,
-    isPasswordInput,
-    sha1Hex,
-    buildPasswordProfile,
-    areProfilesSimilar,
-  } = window.PwUtils
-  const { evaluatePassword } = window.PwAnalyzer
+/**
+ * content.js
+ * 비밀번호 입력 감지, 분석 패널 생성 및 결과 표시를 담당하는 메인 컨트롤러.
+ * analyzer.js (강도 분석) + reuse.js (재사용 탐지) + utils.js (공통 유틸)에 의존합니다.
+ */
 
-  const PANEL_ID = 'pw-helper-panel'
-  const PANEL_WIDTH = 320
-  const PANEL_GAP = 12
-  const STORAGE_KEY = 'pwHelperPasswordHistory'
-  const MAX_HISTORY_SIZE = 50
+// ─── utils.js / analyzer.js 브릿지 ──────────────────────────────────────────
+// utils.js가 window.PwUtils 네임스페이스로 노출되므로 전역 함수로 연결합니다.
+function debounce(fn, delay) {
+  return window.PwUtils.debounce(fn, delay)
+}
+function getSiteName() {
+  const host = window.location.hostname || ''
+  const parts = host.replace(/^www\./, '').split('.')
+  return parts.length >= 2 ? parts[parts.length - 2] : parts[0]
+}
+function isVisiblePasswordInput(el) {
+  return window.PwUtils.isPasswordInput(el)
+}
+async function sha1(text) {
+  return window.PwUtils.sha1Hex(text)
+}
+// analyzer.js가 window.PwAnalyzer 네임스페이스로 노출되므로 전역 함수로 연결합니다.
+function analyzePassword(password, siteName, reuseCount = 0) {
+  return window.PwAnalyzer.evaluatePassword(password, { siteName, reuseCount })
+}
 
-  let panel = null
+// ─── renderStrength 상태값 변환 브릿지 ──────────────────────────────────────
+// analyzer.js는 statusClass('danger'/'normal'/'safe')를 반환하고
+// renderStrength는 status 키를 사용하므로 맞춰줍니다.
+function normalizeAnalyzerResult(result) {
+  return {
+    score: result.score,
+    status: result.statusClass || 'danger',
+    warnings: result.warnings || [],
+  }
+}
+
+;(function () {
+  'use strict'
+
+  // ─── 상수 ────────────────────────────────────────────────────────────────────
+  const PANEL_ID = 'pwguard-panel'
+  const PANEL_CLASS = 'pwguard-panel'
+  const DEBOUNCE_DELAY = 300
+  const REUSE_DELAY = 800
+
+  // ─── 상태 ────────────────────────────────────────────────────────────────────
   let activeInput = null
-  let latestAsyncState = {
-    reused: false,
-    similarReused: false,
-    leaked: false,
-    reuseCount: 0,
-    similarReuseCount: 0,
-  }
-  let capsLockOn = false
+  let panel = null
+  let strengthDebounceTimer = null
+  let reuseDebounceTimer = null
+  let isDetailOpen = false
 
-  function getStorageArea() {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      return chrome.storage.local
-    }
-
-    return null
-  }
-
-  async function getPasswordHistory() {
-    const storage = getStorageArea()
-    if (!storage) return []
-
-    const stored = await storage.get(STORAGE_KEY)
-    return Array.isArray(stored[STORAGE_KEY]) ? stored[STORAGE_KEY] : []
-  }
-
-  async function setPasswordHistory(history) {
-    const storage = getStorageArea()
-    if (!storage) return
-
-    await storage.set({ [STORAGE_KEY]: history })
-  }
-
-  async function savePasswordRecord(password) {
-    if (!password) return
-
-    const passwordHash = await sha1Hex(password)
-    const siteKey = getOriginKey()
-    const siteLabel = getSiteName() || siteKey
-    const profile = buildPasswordProfile(password)
-
-    const history = await getPasswordHistory()
-    const withoutCurrentSite = history.filter((item) => item.siteKey !== siteKey)
-
-    withoutCurrentSite.unshift({
-      siteKey,
-      siteLabel,
-      passwordHash,
-      profile,
-      updatedAt: Date.now(),
-    })
-
-    await setPasswordHistory(withoutCurrentSite.slice(0, MAX_HISTORY_SIZE))
-  }
-
-  async function findReuseState(password) {
-    if (!password) {
-      return {
-        reused: false,
-        similarReused: false,
-        reuseCount: 0,
-        similarReuseCount: 0,
-      }
-    }
-
-    const passwordHash = await sha1Hex(password)
-    const currentProfile = buildPasswordProfile(password)
-    const currentSiteKey = getOriginKey()
-    const history = await getPasswordHistory()
-    const otherSites = history.filter((item) => item.siteKey !== currentSiteKey)
-
-    const exactMatches = otherSites.filter((item) => item.passwordHash === passwordHash)
-    const similarMatches = otherSites.filter((item) => {
-      if (item.passwordHash === passwordHash) return false
-      return areProfilesSimilar(currentProfile, item.profile)
-    })
-
-    return {
-      reused: exactMatches.length > 0,
-      similarReused: similarMatches.length > 0,
-      reuseCount: exactMatches.length,
-      similarReuseCount: similarMatches.length,
-    }
-  }
-
+  // ─── 패널 생성 ───────────────────────────────────────────────────────────────
   function createPanel() {
-    const el = document.createElement('div')
-    el.id = PANEL_ID
-    el.style.display = 'none'
-    el.innerHTML = `
-      <div class="pw-panel-header">
-        <div class="pw-panel-title">비밀번호 보안 분석</div>
-        <div class="pw-panel-badge">실시간</div>
-      </div>
-
-      <div class="pw-panel-row">
-        <span class="pw-label">점수</span>
-        <strong id="pw-score-value">0</strong>
-        <span class="pw-unit">/100</span>
-      </div>
-
-      <div class="pw-panel-row">
-        <span class="pw-label">상태</span>
-        <strong id="pw-status-value" class="pw-status waiting">입력 대기</strong>
-      </div>
-
-      <div class="pw-panel-section-title">확인 항목</div>
-      <ul id="pw-warning-list" class="pw-warning-list">
-        <li>비밀번호 입력 시 분석 시작</li>
-      </ul>
-
-      <div id="pw-extra-info" class="pw-extra-info"></div>
-      <div id="pw-capslock-warning" class="pw-capslock-warning"></div>
-    `
-    document.body.appendChild(el)
-    return el
-  }
-
-  function getPanel() {
-    if (!panel) {
-      panel = createPanel()
+    if (document.getElementById(PANEL_ID)) {
+      panel = document.getElementById(PANEL_ID)
+      return
     }
-    return panel
+
+    panel = document.createElement('div')
+    panel.id = PANEL_ID
+    panel.className = PANEL_CLASS
+    panel.setAttribute('role', 'status')
+    panel.setAttribute('aria-live', 'polite')
+
+    panel.innerHTML = `
+      <div class="pwguard-header">
+        <span class="pwguard-title">🔒 비밀번호 보안 분석</span>
+        <button class="pwguard-close" aria-label="닫기">✕</button>
+      </div>
+      <div class="pwguard-body">
+        <div class="pwguard-score-row">
+          <span class="pwguard-status-badge">—</span>
+          <span class="pwguard-score-text">입력 대기 중</span>
+        </div>
+        <div class="pwguard-strength-bar-wrap">
+          <div class="pwguard-strength-bar" style="width:0%"></div>
+        </div>
+        <ul class="pwguard-warnings" aria-label="경고 목록"></ul>
+
+        <div class="pwguard-reuse-section" style="display:none">
+          <div class="pwguard-reuse-header">
+            <span class="pwguard-reuse-badge">⚠ 재사용 감지</span>
+            <button class="pwguard-detail-toggle" aria-expanded="false">자세히 보기 ▾</button>
+          </div>
+          <ul class="pwguard-reuse-warnings" aria-label="재사용 경고"></ul>
+          <ul class="pwguard-reuse-details" aria-label="재사용 상세 정보" style="display:none"></ul>
+        </div>
+
+        <div class="pwguard-longuse-section" style="display:none">
+          <span class="pwguard-longuse-badge">🕐 장기 사용 감지</span>
+          <ul class="pwguard-longuse-warnings" aria-label="장기 사용 경고"></ul>
+        </div>
+      </div>
+    `
+
+    document.body.appendChild(panel)
+
+    panel.querySelector('.pwguard-close').addEventListener('click', () => {
+      hidePanel()
+    })
+
+    panel
+      .querySelector('.pwguard-detail-toggle')
+      .addEventListener('click', () => {
+        isDetailOpen = !isDetailOpen
+        const detailList = panel.querySelector('.pwguard-reuse-details')
+        const toggleBtn = panel.querySelector('.pwguard-detail-toggle')
+        detailList.style.display = isDetailOpen ? 'block' : 'none'
+        toggleBtn.textContent = isDetailOpen ? '접기 ▴' : '자세히 보기 ▾'
+        toggleBtn.setAttribute('aria-expanded', String(isDetailOpen))
+      })
   }
 
-  function showPanel() {
-    getPanel().style.display = 'block'
+  // ─── 패널 위치 계산 ──────────────────────────────────────────────────────────
+  function positionPanel(inputEl) {
+    if (!panel || !inputEl) return
+
+    const rect = inputEl.getBoundingClientRect()
+    const panelWidth = 280
+    const panelHeight = panel.offsetHeight || 200
+    const vpWidth = window.innerWidth
+    const vpHeight = window.innerHeight
+
+    let left, top
+
+    if (rect.right + panelWidth + 12 <= vpWidth) {
+      left = rect.right + 12
+      top = rect.top
+    } else if (rect.left - panelWidth - 12 >= 0) {
+      left = rect.left - panelWidth - 12
+      top = rect.top
+    } else {
+      left = rect.left
+      top = rect.bottom + 8
+    }
+
+    if (top + panelHeight > vpHeight) {
+      top = vpHeight - panelHeight - 12
+    }
+    top = Math.max(top, 8)
+    left = Math.max(left, 8)
+
+    panel.style.left = left + 'px'
+    panel.style.top = top + 'px'
+  }
+
+  function showPanel(inputEl) {
+    if (!panel) createPanel()
+    panel.style.display = 'block'
+    positionPanel(inputEl)
   }
 
   function hidePanel() {
-    if (panel) {
-      panel.style.display = 'none'
-    }
+    if (panel) panel.style.display = 'none'
+    isDetailOpen = false
   }
 
-  function renderResult(result, extra = {}) {
-    const panelEl = getPanel()
+  // ─── 강도 분석 UI 업데이트 ───────────────────────────────────────────────────
+  function renderStrength(result) {
+    if (!panel) return
 
-    const scoreEl = panelEl.querySelector('#pw-score-value')
-    const statusEl = panelEl.querySelector('#pw-status-value')
-    const warningList = panelEl.querySelector('#pw-warning-list')
-    const extraInfoEl = panelEl.querySelector('#pw-extra-info')
-    const capsLockEl = panelEl.querySelector('#pw-capslock-warning')
+    const badge = panel.querySelector('.pwguard-status-badge')
+    const scoreText = panel.querySelector('.pwguard-score-text')
+    const bar = panel.querySelector('.pwguard-strength-bar')
+    const warningList = panel.querySelector('.pwguard-warnings')
 
-    scoreEl.textContent = result.score
-    statusEl.textContent = result.status
-    statusEl.className = `pw-status ${result.statusClass}`
+    const statusMap = {
+      danger: { label: '위험', cls: 'status-danger' },
+      normal: { label: '보통', cls: 'status-normal' },
+      safe: { label: '안전', cls: 'status-safe' },
+    }
+    const s = statusMap[result.status] || statusMap.danger
+    badge.textContent = s.label
+    badge.className = 'pwguard-status-badge ' + s.cls
+
+    scoreText.textContent = `점수: ${result.score}점`
+
+    const pct = Math.min(100, Math.max(0, result.score))
+    bar.style.width = pct + '%'
+    bar.className = 'pwguard-strength-bar bar-' + result.status
 
     warningList.innerHTML = ''
-    result.warnings.forEach((text) => {
+    ;(result.warnings || []).forEach((w) => {
       const li = document.createElement('li')
-      li.textContent = text
+      li.className = 'pwguard-warning-item'
+      li.textContent = w
       warningList.appendChild(li)
     })
+  }
 
-    const extras = []
+  // ─── 재사용 탐지 UI 업데이트 ─────────────────────────────────────────────────
+  function renderReuse(reuseResult) {
+    if (!panel) return
 
-    if (extra.reuseCount > 0) {
-      extras.push(`동일 비밀번호 재사용: ${extra.reuseCount}개 사이트`)
-    }
+    const { warnings, details, allSites } = buildReuseMessages(reuseResult)
 
-    if (extra.similarReuseCount > 0) {
-      extras.push(`유사 비밀번호 반복: ${extra.similarReuseCount}개 사이트`)
-    }
+    const reuseSection = panel.querySelector('.pwguard-reuse-section')
+    const reuseWarnList = panel.querySelector('.pwguard-reuse-warnings')
+    const reuseDetailList = panel.querySelector('.pwguard-reuse-details')
 
-    if (extra.leaked === true) {
-      extras.push('유출 의심: 확인 필요')
-    }
+    if (reuseResult.isReused) {
+      reuseSection.style.display = 'block'
 
-    extraInfoEl.textContent = extras.join(' · ')
+      // 경고 메시지
+      reuseWarnList.innerHTML = ''
+      warnings
+        .filter((w) => !w.includes('일째'))
+        .forEach((w) => {
+          const li = document.createElement('li')
+          li.className = 'pwguard-warning-item'
+          li.textContent = w
+          reuseWarnList.appendChild(li)
+        })
 
-    if (extra.capsLockOn) {
-      capsLockEl.textContent = 'Caps Lock이 켜져 있습니다.'
-      capsLockEl.style.display = 'block'
+      // 상세 정보 + 사이트 목록 토글
+      reuseDetailList.innerHTML = ''
+
+      // 기본 상세 항목 (사이트 수, 횟수)
+      details.forEach((d) => {
+        const li = document.createElement('li')
+        li.className = 'pwguard-detail-item'
+        li.textContent = d
+        reuseDetailList.appendChild(li)
+      })
+
+      // 사이트 목록 토글 (3개 이하면 바로 표시, 초과면 "더 보기" 토글)
+      if (allSites.length > 0) {
+        const PREVIEW = 3
+        const previewSites = allSites.slice(0, PREVIEW)
+        const extraSites = allSites.slice(PREVIEW)
+
+        // 미리보기 3개
+        const sitePreviewLi = document.createElement('li')
+        sitePreviewLi.className = 'pwguard-detail-item'
+        sitePreviewLi.textContent = `사용된 사이트: ${previewSites.join(', ')}`
+        reuseDetailList.appendChild(sitePreviewLi)
+
+        // 초과 사이트가 있으면 토글 추가
+        if (extraSites.length > 0) {
+          // "외 N개 더 보기" 버튼
+          const moreLi = document.createElement('li')
+          moreLi.className = 'pwguard-detail-item'
+
+          const moreBtn = document.createElement('button')
+          moreBtn.className = 'pwguard-site-more-btn'
+          moreBtn.textContent = `외 ${extraSites.length}개 더 보기 ▾`
+          moreLi.appendChild(moreBtn)
+          reuseDetailList.appendChild(moreLi)
+
+          // 숨겨진 사이트 목록
+          const extraUl = document.createElement('ul')
+          extraUl.className = 'pwguard-site-extra-list'
+          extraUl.style.display = 'none'
+          extraSites.forEach((site) => {
+            const li = document.createElement('li')
+            li.className = 'pwguard-detail-item'
+            li.textContent = site
+            extraUl.appendChild(li)
+          })
+          reuseDetailList.appendChild(extraUl)
+
+          // 토글 동작
+          let siteListOpen = false
+          moreBtn.addEventListener('click', () => {
+            siteListOpen = !siteListOpen
+            extraUl.style.display = siteListOpen ? 'block' : 'none'
+            moreBtn.textContent = siteListOpen
+              ? `접기 ▴`
+              : `외 ${extraSites.length}개 더 보기 ▾`
+          })
+        }
+      }
+
+      reuseDetailList.style.display = isDetailOpen ? 'block' : 'none'
     } else {
-      capsLockEl.textContent = ''
-      capsLockEl.style.display = 'none'
+      reuseSection.style.display = 'none'
+    }
+
+    // 장기 사용 섹션
+    const longUseSection = panel.querySelector('.pwguard-longuse-section')
+    const longUseList = panel.querySelector('.pwguard-longuse-warnings')
+
+    if (reuseResult.isLongUsed) {
+      longUseSection.style.display = 'block'
+      longUseList.innerHTML = ''
+      warnings
+        .filter((w) => w.includes('일째'))
+        .forEach((w) => {
+          const li = document.createElement('li')
+          li.className = 'pwguard-warning-item'
+          li.textContent = w
+          longUseList.appendChild(li)
+        })
+    } else {
+      longUseSection.style.display = 'none'
     }
   }
 
-  function positionPanel(input) {
-    const panelEl = getPanel()
-    if (!input || !isPasswordInput(input)) {
-      hidePanel()
-      return
-    }
+  // ─── 입력 이벤트 핸들러 ──────────────────────────────────────────────────────
+  function handleInput(e) {
+    const input = e.target
+    const value = input.value
+    const domain = getSiteName()
 
-    showPanel()
-
-    panelEl.style.width = `${PANEL_WIDTH}px`
-
-    const rect = input.getBoundingClientRect()
-    const scrollX = window.scrollX || window.pageXOffset
-    const scrollY = window.scrollY || window.pageYOffset
-
-    const panelHeight = panelEl.offsetHeight || 180
-
-    let left = rect.right + scrollX + PANEL_GAP
-    let top = rect.top + scrollY
-
-    const viewportRight = scrollX + window.innerWidth
-    const fitsRight = left + PANEL_WIDTH <= viewportRight - 12
-
-    if (!fitsRight) {
-      left = rect.left + scrollX
-      top = rect.top + scrollY - panelHeight - PANEL_GAP
-
-      if (top < scrollY + 12) {
-        top = rect.bottom + scrollY + PANEL_GAP
-      }
-    }
-
-    if (left < 12) left = 12
-    const maxLeft = scrollX + window.innerWidth - PANEL_WIDTH - 12
-    if (left > maxLeft) left = maxLeft
-
-    panelEl.style.left = `${left}px`
-    panelEl.style.top = `${top}px`
-  }
-
-  function renderForPassword(password) {
-    const result = evaluatePassword(password, {
-      siteName: getSiteName(),
-      reused: latestAsyncState.reused,
-      similarReused: latestAsyncState.similarReused,
-      leaked: latestAsyncState.leaked,
-    })
-
-    renderResult(result, {
-      reuseCount: latestAsyncState.reuseCount || 0,
-      similarReuseCount: latestAsyncState.similarReuseCount || 0,
-      leaked: latestAsyncState.leaked,
-      capsLockOn,
-    })
-  }
-
-  async function runFutureChecks(password) {
-    if (!password) {
-      latestAsyncState = {
-        reused: false,
-        similarReused: false,
-        leaked: false,
-        reuseCount: 0,
-        similarReuseCount: 0,
-      }
-      renderForPassword(password)
-      return
-    }
-
-    const reuseState = await findReuseState(password)
-
-    latestAsyncState = {
-      ...reuseState,
-      leaked: false,
-    }
-
-    renderForPassword(password)
-  }
-
-  const debouncedFutureChecks = debounce(runFutureChecks, 500)
-
-  function activateInput(input) {
-    if (!isPasswordInput(input)) return
-
-    activeInput = input
     positionPanel(input)
-    renderForPassword(input.value || '')
-    debouncedFutureChecks(input.value || '')
-  }
 
-  function handleFocusIn(event) {
-    const target = event.target
-    if (!isPasswordInput(target)) return
+    // 1. 강도 분석 - 재사용 횟수 없이 먼저 빠르게 표시
+    clearTimeout(strengthDebounceTimer)
+    strengthDebounceTimer = setTimeout(() => {
+      const raw = analyzePassword(value, domain, 0)
+      renderStrength(normalizeAnalyzerResult(raw))
+    }, DEBOUNCE_DELAY)
 
-    activateInput(target)
-  }
+    // 2. 재사용 탐지 후 → 재사용 횟수 반영해서 점수 재계산
+    clearTimeout(reuseDebounceTimer)
+    if (value.length >= 4) {
+      reuseDebounceTimer = setTimeout(async () => {
+        try {
+          const reuseResult = await analyzeReuse(value, domain)
+          renderReuse(reuseResult)
 
-  function updateCapsLockState(event) {
-    const target = event.target
-    if (!isPasswordInput(target)) return
-
-    if (typeof event.getModifierState === 'function') {
-      capsLockOn = event.getModifierState('CapsLock')
-      renderForPassword(target.value || '')
-      positionPanel(target)
+          // 재사용 횟수를 반영하여 점수 재계산
+          const raw = analyzePassword(value, domain, reuseResult.reuseCount)
+          renderStrength(normalizeAnalyzerResult(raw))
+        } catch (err) {
+          console.warn('[PwGuard] reuse analysis error:', err)
+        }
+      }, REUSE_DELAY)
+    } else {
+      renderReuse({
+        isReused: false,
+        isLongUsed: false,
+        otherSites: [],
+        reuseCount: 0,
+        daysOnSite: 0,
+      })
     }
   }
 
-  function handleInput(event) {
-    const target = event.target
-    if (!isPasswordInput(target)) return
-
-    activeInput = target
-    latestAsyncState = {
-      reused: false,
-      similarReused: false,
-      leaked: false,
-      reuseCount: 0,
-      similarReuseCount: 0,
-    }
-
-    renderForPassword(target.value || '')
-    positionPanel(target)
-    debouncedFutureChecks(target.value || '')
+  function handleFocus(e) {
+    const input = e.target
+    if (!isVisiblePasswordInput(input)) return
+    activeInput = input
+    showPanel(input)
   }
 
-  function maybePersistPassword(target) {
-    if (!isPasswordInput(target)) return
-
-    const password = target.value || ''
-    if (password.length < 8) return
-
-    savePasswordRecord(password).catch(() => {})
-  }
-
-  function handleFocusOut(event) {
-    const target = event.target
-    if (!target || target.tagName !== 'INPUT' || target.type !== 'password') {
-      return
-    }
-
-    maybePersistPassword(target)
-
+  function handleBlur() {
     setTimeout(() => {
-      if (!isPasswordInput(document.activeElement)) {
-        hidePanel()
-        activeInput = null
-        capsLockOn = false
-      }
-    }, 80)
+      if (
+        document.activeElement &&
+        panel &&
+        panel.contains(document.activeElement)
+      )
+        return
+      hidePanel()
+      activeInput = null
+    }, 150)
   }
 
-  function handleSubmit(event) {
-    const form = event.target
-    if (!form || typeof form.querySelectorAll !== 'function') return
-
-    const passwordInputs = Array.from(form.querySelectorAll('input[type="password"]'))
-    passwordInputs.forEach((input) => {
-      maybePersistPassword(input)
+  // ─── 비밀번호 입력창 감지 ────────────────────────────────────────────────────
+  function attachToPasswordInputs(root) {
+    const inputs = root.querySelectorAll('input[type="password"]')
+    inputs.forEach((input) => {
+      if (input.dataset.pwguardAttached) return
+      input.dataset.pwguardAttached = 'true'
+      input.addEventListener('focus', handleFocus)
+      input.addEventListener('blur', handleBlur)
+      input.addEventListener('input', handleInput)
     })
   }
 
-  function handleViewportChange() {
-    if (activeInput && isPasswordInput(activeInput)) {
-      positionPanel(activeInput)
+  // ─── MutationObserver ────────────────────────────────────────────────────────
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType !== Node.ELEMENT_NODE) continue
+        if (node.matches && node.matches('input[type="password"]')) {
+          attachToPasswordInputs(node.parentElement || document)
+        } else if (node.querySelector) {
+          attachToPasswordInputs(node)
+        }
+      }
     }
-  }
+  })
 
+  // ─── 창 크기/스크롤 대응 ─────────────────────────────────────────────────────
+  window.addEventListener(
+    'resize',
+    debounce(() => {
+      if (activeInput && panel && panel.style.display !== 'none') {
+        positionPanel(activeInput)
+      }
+    }, 200),
+  )
+
+  window.addEventListener(
+    'scroll',
+    debounce(() => {
+      if (activeInput && panel && panel.style.display !== 'none') {
+        positionPanel(activeInput)
+      }
+    }, 100),
+    true,
+  )
+
+  // ─── 초기화 ──────────────────────────────────────────────────────────────────
   function init() {
-    getPanel()
-
-    document.addEventListener('focusin', handleFocusIn, true)
-    document.addEventListener('input', handleInput, true)
-    document.addEventListener('focusout', handleFocusOut, true)
-    document.addEventListener('keydown', updateCapsLockState, true)
-    document.addEventListener('keyup', updateCapsLockState, true)
-    document.addEventListener('submit', handleSubmit, true)
-
-    window.addEventListener('resize', handleViewportChange)
-    window.addEventListener('scroll', handleViewportChange, true)
+    createPanel()
+    hidePanel()
+    attachToPasswordInputs(document)
+    observer.observe(document.body, { childList: true, subtree: true })
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true })
+    document.addEventListener('DOMContentLoaded', init)
   } else {
     init()
   }
