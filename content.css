@@ -1,0 +1,246 @@
+/* =========================================================
+   content.css - 드래그 앤 드롭 및 사용자 지정 위치 최적화
+   ========================================================= */
+
+/* ── 패널 컨테이너 ──────────────────────────────────────── */
+#pwguard-panel {
+  position: fixed; /* 브라우저 화면에 고정 */
+  z-index: 2147483647;
+  width: 280px;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  font-family: -apple-system, system-ui, sans-serif;
+  font-size: 13px;
+  color: #374151;
+  display: none;
+  overflow: hidden;
+  /* 드래그 시 반응성을 위해 기본 상태에만 트랜지션 적용 */
+  transition:
+    opacity 0.2s,
+    width 0.2s;
+}
+
+/* 드래그 중일 때의 스타일 (JS에서 제어) */
+#pwguard-panel.is-dragging {
+  cursor: move;
+  opacity: 0.85; /* 이동 중임을 나타내기 위해 살짝 투명화 */
+  transition: none !important; /* 드래그 시 즉각적인 반응을 위해 트랜지션 제거 */
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.25);
+}
+
+/* 최소화(접힘) 상태 스타일 */
+#pwguard-panel.minimized {
+  width: 260px; /* 접혔을 때 너비 축소 */
+}
+
+#pwguard-panel.minimized .pwguard-body {
+  padding: 8px 12px;
+}
+
+/* 최소화 시 본문 내용 숨기기 (점수 바 제외) */
+#pwguard-panel.minimized .pwguard-warnings,
+#pwguard-panel.minimized .pwguard-reuse-section,
+#pwguard-panel.minimized .pwguard-longuse-section {
+  display: none !important;
+}
+
+/* 다크 모드 */
+@media (prefers-color-scheme: dark) {
+  #pwguard-panel {
+    background: #1f2937;
+    border-color: #374151;
+    color: #f3f4f6;
+  }
+}
+
+/* ── 헤더 (드래그 핸들) ────────────────────────────────────── */
+.pwguard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  cursor: move; /* 이동 가능함을 알리는 커서 */
+  user-select: none; /* 드래그 중 텍스트 선택 방지 */
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-header {
+    background: #111827;
+    border-bottom-color: #374151;
+  }
+}
+
+.pwguard-title {
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none; /* 제목 클릭 시 드래그 방해 금지 */
+}
+
+/* ── 컨트롤 버튼들 ────────────────────────────────────────── */
+.pwguard-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.pwguard-minimize-btn,
+.pwguard-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: #9ca3af;
+  line-height: 1;
+  padding: 2px 4px;
+  transition: color 0.2s;
+}
+
+.pwguard-minimize-btn:hover {
+  color: #374151;
+}
+
+.pwguard-close:hover {
+  color: #ef4444; /* 호버 시에만 살짝 빨간색 */
+}
+
+/* ── 본문 ───────────────────────────────────────────────── */
+.pwguard-body {
+  padding: 12px 14px;
+}
+
+/* ── 점수 및 상태 ────────────────────────────────────────── */
+.pwguard-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.pwguard-score-text {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* ── 프로그레스 바 ────────────────────────────── */
+.pwguard-strength-bar-wrap {
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-strength-bar-wrap {
+    background: #4b5563;
+  }
+}
+
+.pwguard-strength-bar {
+  height: 100%;
+  width: 0%;
+  transition: width 0.3s ease-out; /* 부드러운 이동 */
+}
+
+/* 범용적인 상태 색상 (위험/보통/안전) */
+.pwguard-strength-bar.bar-danger {
+  background-color: #ef4444;
+}
+.pwguard-strength-bar.bar-normal {
+  background-color: #f59e0b;
+}
+.pwguard-strength-bar.bar-safe {
+  background-color: #10b981;
+}
+
+/* ── 경고 리스트 ────────────────────────────────────────── */
+.pwguard-warnings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pwguard-warning-item {
+  font-size: 12px;
+  color: #6b7280;
+  padding-left: 12px;
+  position: relative;
+  margin-top: 4px;
+}
+
+.pwguard-warning-item::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: #9ca3af;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-warning-item {
+    color: #9ca3af;
+  }
+}
+
+/* ── 재사용 섹션 (기본) ────────────────────────────────────── */
+.pwguard-reuse-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* ── 유출 검사 공통 (한 줄 인라인 행) ────────────────────── */
+.pwguard-leak-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-leak-row {
+    border-top-color: #374151;
+  }
+}
+
+/* 아이콘 자리 */
+.pwguard-leak-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 유출됨 */
+.pwguard-leak-section .pwguard-leak-dot  { background: #ef4444; }
+.pwguard-leak-section .pwguard-leak-label { color: #ef4444; font-weight: 600; }
+.pwguard-leak-section .pwguard-leak-sub   { color: #9ca3af; }
+
+/* 안전 */
+.pwguard-leak-safe-section .pwguard-leak-dot   { background: #10b981; }
+.pwguard-leak-safe-section .pwguard-leak-label { color: #10b981; font-weight: 600; }
+
+/* 검사 중 */
+.pwguard-leak-checking .pwguard-leak-dot {
+  background: #d1d5db;
+  animation: pwguard-pulse 1s ease-in-out infinite;
+}
+.pwguard-leak-checking .pwguard-leak-label { color: #9ca3af; }
+
+@keyframes pwguard-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .pwguard-leak-section .pwguard-leak-label  { color: #f87171; }
+  .pwguard-leak-section .pwguard-leak-sub    { color: #6b7280; }
+  .pwguard-leak-safe-section .pwguard-leak-label { color: #34d399; }
+  .pwguard-leak-safe-section .pwguard-leak-dot   { background: #34d399; }
+  .pwguard-leak-section .pwguard-leak-dot        { background: #f87171; }
+}

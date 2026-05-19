@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PwGuard</title>
+
+    <style>
+      body {
+        width: 280px;
+        padding: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 14px;
+        color: #222;
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 16px;
+        color: #333;
+      }
+
+      input {
+        width: 100%;
+        padding: 8px;
+        margin-bottom: 8px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        box-sizing: border-box;
+        font-size: 14px;
+      }
+
+      button {
+        width: 100%;
+        padding: 9px;
+        margin-bottom: 6px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: opacity 0.2s;
+      }
+
+      button:hover {
+        opacity: 0.9;
+      }
+
+      /* 로그인 버튼 */
+      #login-btn {
+        background: #4f8ef7;
+        color: #fff;
+      }
+
+      /* 인증 메일 재전송 */
+      #resend-btn {
+        display: none;
+        background: #f59e0b;
+        color: #fff;
+      }
+
+      /* 로그아웃 버튼 */
+      #logout-btn {
+        background: #f55;
+        color: #fff;
+      }
+
+      /* OTP 인증 완료 버튼 */
+      #otp-confirm-btn {
+        background: #10b981;
+        color: #fff;
+        margin-bottom: 0;
+      }
+
+      /* OTP 인증 영역 */
+      #otp-section {
+        display: none;
+        margin-top: 12px;
+        padding: 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: #f9fafb;
+        box-sizing: border-box;
+      }
+
+      #otp-section p {
+        margin: 0 0 8px;
+        font-size: 12px;
+        color: #4b5563;
+        line-height: 1.4;
+      }
+
+      /* OTP 입력창 */
+      #otp-code {
+        text-align: center;
+        font-size: 18px;
+        font-weight: bold;
+        letter-spacing: 6px;
+        text-indent: 6px;
+        padding: 6px;
+        margin-bottom: 8px;
+      }
+
+      /* 로그인 성공 영역 */
+      #success-section {
+        display: none;
+      }
+
+      /* 이메일 표시 */
+      #user-email {
+        font-weight: bold;
+        color: #4f8ef7;
+        margin-bottom: 12px;
+        word-break: break-all;
+      }
+
+      /* 상태 메시지 */
+      #status-msg {
+        font-size: 12px;
+        color: #888;
+        margin-top: 8px;
+        min-height: 16px;
+        line-height: 1.5;
+      }
+
+      /* 회원가입 링크 */
+      #status-msg a {
+        color: #10b981;
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      #status-msg a:hover {
+        text-decoration: underline;
+      }
+
+      /* 안내 문구 */
+      .info-text {
+        font-size: 11px;
+        color: #999;
+        margin: 6px 0 0;
+        line-height: 1.4;
+      }
+
+      /* 비밀번호 변경 UI */
+
+      #new-password {
+        margin-top: 10px;
+      }
+
+      #change-password-btn {
+        background: #4f8ef7;
+        color: #fff;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h2>🔒 PwGuard</h2>
+
+    <div id="auth-section">
+      <input type="email" id="email" placeholder="이메일" />
+
+      <input type="password" id="password" placeholder="비밀번호" />
+
+      <button id="login-btn">로그인</button>
+
+      <button id="resend-btn">인증 메일 재전송</button>
+
+      <div id="otp-section">
+        <p>✉️ 이메일로 발송된 6자리 인증번호를 입력해주세요. (유효시간 5분)</p>
+
+        <input type="text" id="otp-code" placeholder="000000" maxlength="6" />
+
+        <button id="otp-confirm-btn">인증 완료</button>
+      </div>
+
+      <p class="info-text">
+        ※ 회원가입 후 이메일 인증이 완료되어야 로그인할 수 있습니다.
+      </p>
+
+      <!-- 비밀번호 찾기 -->
+      <div style="margin-top: 8px; text-align: left">
+        <a
+          href="#"
+          id="forgot-password"
+          style="font-size: 12px; color: #888; text-decoration: none"
+        >
+          비밀번호 찾기
+        </a>
+      </div>
+
+      <div id="status-msg"></div>
+    </div>
+
+    <div id="success-section">
+      <p id="user-email"></p>
+
+      <p style="color: #555; font-size: 13px; line-height: 1.5">
+        로그인 상태입니다.
+        <br />
+        비밀번호 입력창에서 보안 분석이 자동으로 실행됩니다.
+      </p>
+
+      <!-- 추가 시작 -->
+      <input type="password" id="new-password" placeholder="새 비밀번호" />
+
+      <button id="change-password-btn">비밀번호 변경</button>
+      <!-- 추가 끝 -->
+
+      <button id="logout-btn">로그아웃</button>
+    </div>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
